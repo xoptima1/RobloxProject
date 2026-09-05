@@ -62,6 +62,13 @@ local function createCar(spawnPosition)
 	return chassis, seat
 end
 
+local function moveTowards(current, target, maxDelta)
+	if math.abs(target - current) <= maxDelta then
+		return target
+	end
+	return current + math.sign(target - current) * maxDelta
+end
+
 local function attachDriving(chassis, seat)
 	local bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.MaxForce = Vector3.new(math.huge, 0, math.huge)
@@ -74,11 +81,35 @@ local function attachDriving(chassis, seat)
 	bodyGyro.CFrame = chassis.CFrame
 	bodyGyro.Parent = chassis
 
-	RunService.Heartbeat:Connect(function(deltaTime)
-		bodyVelocity.Velocity = chassis.CFrame.LookVector * seat.Throttle * CarConfig.MAX_SPEED
+	-- Signed forward speed along the chassis's LookVector. Kept separate from
+	-- the chassis's actual velocity so we can ease it towards the target
+	-- speed instead of snapping BodyVelocity straight to the throttle input.
+	local currentSpeed = 0
 
-		-- Steer is -1..1 (A..D); flip the sign so positive Steer turns the car right.
-		local turnAngle = -seat.Steer * CarConfig.TURN_SPEED * deltaTime
+	RunService.Heartbeat:Connect(function(deltaTime)
+		local targetSpeed = seat.Throttle * CarConfig.MAX_SPEED
+
+		local rate
+		if targetSpeed == 0 then
+			rate = CarConfig.COAST_DECELERATION
+		elseif currentSpeed == 0 or (targetSpeed > 0) == (currentSpeed > 0) then
+			rate = CarConfig.ACCELERATION
+		else
+			rate = CarConfig.BRAKE_DECELERATION
+		end
+
+		currentSpeed = moveTowards(currentSpeed, targetSpeed, rate * deltaTime)
+		if math.abs(currentSpeed) < CarConfig.STOP_THRESHOLD and targetSpeed == 0 then
+			currentSpeed = 0
+		end
+
+		bodyVelocity.Velocity = chassis.CFrame.LookVector * currentSpeed
+
+		-- Scale turning by how fast (and which direction) the car is moving, so it
+		-- can't spin in place, turns tighter at speed, and reverses naturally when
+		-- backing up. Steer is -1..1 (A..D); flip the sign so positive Steer turns right.
+		local speedRatio = currentSpeed / CarConfig.MAX_SPEED
+		local turnAngle = -seat.Steer * CarConfig.TURN_SPEED * deltaTime * speedRatio
 		bodyGyro.CFrame = bodyGyro.CFrame * CFrame.Angles(0, turnAngle, 0)
 	end)
 end
