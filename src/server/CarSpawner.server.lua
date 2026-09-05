@@ -3,39 +3,308 @@ local RunService = game:GetService("RunService")
 
 local CarConfig = require(ReplicatedStorage.Shared.CarConfig)
 
-local function createBodyPanel(name, size, offset, color, car, chassis)
-	local panel = Instance.new("Part")
-	panel.Name = name
-	panel.Size = size
-	panel.CFrame = chassis.CFrame * CFrame.new(offset)
-	panel.Color = color
-	panel.TopSurface = Enum.SurfaceType.Smooth
-	panel.BottomSurface = Enum.SurfaceType.Smooth
-	panel.Parent = car
+-- Builds one purely cosmetic part welded to the chassis: no collision and
+-- no mass, so styling detail (mirrors, spoiler, exhaust, glass, etc.) can
+-- never snag on the world or throw off the car's physics -- only the
+-- Chassis and Ballast parts in createCar are solid/heavy.
+local function createDetail(options)
+	local part = Instance.new("Part")
+	part.Name = options.name
+	part.Shape = options.shape or Enum.PartType.Block
+	part.Size = options.size
+	part.CFrame = options.chassis.CFrame * CFrame.new(options.offset) * (options.rotation or CFrame.new())
+	part.Color = options.color
+	part.Material = options.material or Enum.Material.SmoothPlastic
+	part.Transparency = options.transparency or 0
+	part.CanCollide = false
+	part.Massless = true
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Parent = options.car
 
 	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = panel
-	weld.Part1 = chassis
-	weld.Parent = panel
+	weld.Part0 = part
+	weld.Part1 = options.chassis
+	weld.Parent = part
 
-	return panel
+	return part
 end
 
-local function createWheel(name, offset, car, chassis)
-	local wheel = Instance.new("Part")
-	wheel.Name = name
-	wheel.Shape = Enum.PartType.Cylinder
-	wheel.Size = CarConfig.WHEEL_SIZE
-	wheel.CFrame = chassis.CFrame * CFrame.new(offset)
-	wheel.Color = Color3.fromRGB(35, 35, 35)
-	wheel.TopSurface = Enum.SurfaceType.Smooth
-	wheel.BottomSurface = Enum.SurfaceType.Smooth
-	wheel.Parent = car
+local function addStyling(car, chassis)
+	local halfX = CarConfig.CHASSIS_SIZE.X / 2
+	local halfZ = CarConfig.CHASSIS_SIZE.Z / 2
 
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = wheel
-	weld.Part1 = chassis
-	weld.Parent = wheel
+	-- Hood and trunk: a low panel up front and out back, leaving an open
+	-- cockpit in the middle for the seat -- a roadster-style silhouette
+	-- instead of one flat slab.
+	local hoodOffsetZ = -(halfZ - CarConfig.HOOD_SIZE.Z / 2)
+	local trunkOffsetZ = halfZ - CarConfig.TRUNK_SIZE.Z / 2
+	local panelOffsetY = CarConfig.CHASSIS_SIZE.Y / 2 + CarConfig.HOOD_SIZE.Y / 2
+
+	createDetail({
+		name = "Hood",
+		size = CarConfig.HOOD_SIZE,
+		offset = Vector3.new(0, panelOffsetY, hoodOffsetZ),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "Trunk",
+		size = CarConfig.TRUNK_SIZE,
+		offset = Vector3.new(0, panelOffsetY, trunkOffsetZ),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Roof and glass, forming an enclosed-looking cabin around the seat.
+	-- Everything here is CanCollide = false so it never blocks the player
+	-- from walking up to and sitting in the seat underneath it.
+	local roofBottomY = CarConfig.ROOF_OFFSET_Y - CarConfig.ROOF_SIZE.Y / 2
+	local roofFrontZ = CarConfig.ROOF_OFFSET_Z - CarConfig.ROOF_SIZE.Z / 2
+	local roofBackZ = CarConfig.ROOF_OFFSET_Z + CarConfig.ROOF_SIZE.Z / 2
+
+	createDetail({
+		name = "Roof",
+		size = CarConfig.ROOF_SIZE,
+		offset = Vector3.new(0, CarConfig.ROOF_OFFSET_Y, CarConfig.ROOF_OFFSET_Z),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "Windshield",
+		size = CarConfig.WINDSHIELD_SIZE,
+		offset = CarConfig.WINDSHIELD_OFFSET,
+		color = CarConfig.GLASS_COLOR,
+		material = Enum.Material.Glass,
+		transparency = 0.4,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "RearWindow",
+		size = CarConfig.REAR_WINDOW_SIZE,
+		offset = CarConfig.REAR_WINDOW_OFFSET,
+		color = CarConfig.GLASS_COLOR,
+		material = Enum.Material.Glass,
+		transparency = 0.4,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Four corner pillars connect the roof down to the body, framing the glass.
+	local pillarX = halfX - 0.15
+	local pillarY = roofBottomY - CarConfig.PILLAR_SIZE.Y / 2
+
+	local pillarOffsets = {
+		PillarFrontLeft = Vector3.new(-pillarX, pillarY, roofFrontZ),
+		PillarFrontRight = Vector3.new(pillarX, pillarY, roofFrontZ),
+		PillarBackLeft = Vector3.new(-pillarX, pillarY, roofBackZ),
+		PillarBackRight = Vector3.new(pillarX, pillarY, roofBackZ),
+	}
+	for pillarName, offset in pairs(pillarOffsets) do
+		createDetail({
+			name = pillarName,
+			size = CarConfig.PILLAR_SIZE,
+			offset = offset,
+			color = CarConfig.ACCENT_COLOR,
+			car = car,
+			chassis = chassis,
+		})
+	end
+
+	-- Bumpers, grille, and license plates.
+	createDetail({
+		name = "FrontBumper",
+		size = CarConfig.BUMPER_SIZE,
+		offset = CarConfig.FRONT_BUMPER_OFFSET,
+		color = CarConfig.CHROME_COLOR,
+		material = Enum.Material.Metal,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "RearBumper",
+		size = CarConfig.BUMPER_SIZE,
+		offset = CarConfig.REAR_BUMPER_OFFSET,
+		color = CarConfig.CHROME_COLOR,
+		material = Enum.Material.Metal,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "Grille",
+		size = CarConfig.GRILLE_SIZE,
+		offset = CarConfig.GRILLE_OFFSET,
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "FrontPlate",
+		size = CarConfig.LICENSE_PLATE_SIZE,
+		offset = CarConfig.FRONT_PLATE_OFFSET,
+		color = CarConfig.PLATE_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "RearPlate",
+		size = CarConfig.LICENSE_PLATE_SIZE,
+		offset = CarConfig.REAR_PLATE_OFFSET,
+		color = CarConfig.PLATE_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Headlights and taillights. Neon material makes them glow even without
+	-- an actual light source -- a cheap way to sell "the lights are on."
+	createDetail({
+		name = "HeadlightLeft",
+		size = CarConfig.HEADLIGHT_SIZE,
+		offset = Vector3.new(-CarConfig.HEADLIGHT_X, CarConfig.HEADLIGHT_OFFSET_Y, CarConfig.HEADLIGHT_OFFSET_Z),
+		color = CarConfig.HEADLIGHT_COLOR,
+		material = Enum.Material.Neon,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "HeadlightRight",
+		size = CarConfig.HEADLIGHT_SIZE,
+		offset = Vector3.new(CarConfig.HEADLIGHT_X, CarConfig.HEADLIGHT_OFFSET_Y, CarConfig.HEADLIGHT_OFFSET_Z),
+		color = CarConfig.HEADLIGHT_COLOR,
+		material = Enum.Material.Neon,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "TaillightLeft",
+		size = CarConfig.TAILLIGHT_SIZE,
+		offset = Vector3.new(-CarConfig.HEADLIGHT_X, CarConfig.TAILLIGHT_OFFSET_Y, CarConfig.TAILLIGHT_OFFSET_Z),
+		color = CarConfig.TAILLIGHT_COLOR,
+		material = Enum.Material.Neon,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "TaillightRight",
+		size = CarConfig.TAILLIGHT_SIZE,
+		offset = Vector3.new(CarConfig.HEADLIGHT_X, CarConfig.TAILLIGHT_OFFSET_Y, CarConfig.TAILLIGHT_OFFSET_Z),
+		color = CarConfig.TAILLIGHT_COLOR,
+		material = Enum.Material.Neon,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Side mirrors.
+	createDetail({
+		name = "MirrorLeft",
+		size = CarConfig.MIRROR_SIZE,
+		offset = Vector3.new(-CarConfig.MIRROR_OFFSET.X, CarConfig.MIRROR_OFFSET.Y, CarConfig.MIRROR_OFFSET.Z),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "MirrorRight",
+		size = CarConfig.MIRROR_SIZE,
+		offset = CarConfig.MIRROR_OFFSET,
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Rear spoiler: two struts holding up a wing.
+	createDetail({
+		name = "SpoilerStrutLeft",
+		size = CarConfig.SPOILER_STRUT_SIZE,
+		offset = Vector3.new(-CarConfig.SPOILER_STRUT_X, CarConfig.SPOILER_STRUT_OFFSET_Y, CarConfig.SPOILER_OFFSET_Z),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "SpoilerStrutRight",
+		size = CarConfig.SPOILER_STRUT_SIZE,
+		offset = Vector3.new(CarConfig.SPOILER_STRUT_X, CarConfig.SPOILER_STRUT_OFFSET_Y, CarConfig.SPOILER_OFFSET_Z),
+		color = CarConfig.ACCENT_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "SpoilerWing",
+		size = CarConfig.SPOILER_WING_SIZE,
+		offset = Vector3.new(0, CarConfig.SPOILER_WING_OFFSET_Y, CarConfig.SPOILER_OFFSET_Z),
+		color = CarConfig.BODY_COLOR,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Exhaust pipes. Cylinders default to spinning around local X, so
+	-- rotating 90 degrees around Y swings that axis to point along Z
+	-- (backward) instead of sideways.
+	local exhaustRotation = CFrame.Angles(0, math.rad(90), 0)
+	createDetail({
+		name = "ExhaustLeft",
+		shape = Enum.PartType.Cylinder,
+		size = CarConfig.EXHAUST_SIZE,
+		offset = Vector3.new(-CarConfig.EXHAUST_X, CarConfig.EXHAUST_OFFSET_Y, CarConfig.EXHAUST_OFFSET_Z),
+		rotation = exhaustRotation,
+		color = CarConfig.CHROME_COLOR,
+		material = Enum.Material.Metal,
+		car = car,
+		chassis = chassis,
+	})
+	createDetail({
+		name = "ExhaustRight",
+		shape = Enum.PartType.Cylinder,
+		size = CarConfig.EXHAUST_SIZE,
+		offset = Vector3.new(CarConfig.EXHAUST_X, CarConfig.EXHAUST_OFFSET_Y, CarConfig.EXHAUST_OFFSET_Z),
+		rotation = exhaustRotation,
+		color = CarConfig.CHROME_COLOR,
+		material = Enum.Material.Metal,
+		car = car,
+		chassis = chassis,
+	})
+
+	-- Wheels and rims. Wheel cylinders default to spinning around their
+	-- local X axis, which already lines up with the chassis's left/right
+	-- axis, so no extra rotation is needed. Each rim shares its wheel's
+	-- position but is narrower and smaller in diameter, so it sits inset
+	-- inside the tire like a hubcap instead of z-fighting with it.
+	local wheelSideOffset = halfX + CarConfig.WHEEL_SIZE.X / 2
+	local wheelFrontBackOffset = halfZ - CarConfig.WHEEL_SIZE.Y / 2
+	local wheelHeightOffset = -CarConfig.CHASSIS_SIZE.Y / 2
+
+	local wheelOffsets = {
+		WheelFrontLeft = Vector3.new(-wheelSideOffset, wheelHeightOffset, -wheelFrontBackOffset),
+		WheelFrontRight = Vector3.new(wheelSideOffset, wheelHeightOffset, -wheelFrontBackOffset),
+		WheelBackLeft = Vector3.new(-wheelSideOffset, wheelHeightOffset, wheelFrontBackOffset),
+		WheelBackRight = Vector3.new(wheelSideOffset, wheelHeightOffset, wheelFrontBackOffset),
+	}
+	for wheelName, offset in pairs(wheelOffsets) do
+		createDetail({
+			name = wheelName,
+			shape = Enum.PartType.Cylinder,
+			size = CarConfig.WHEEL_SIZE,
+			offset = offset,
+			color = Color3.fromRGB(35, 35, 35),
+			car = car,
+			chassis = chassis,
+		})
+		createDetail({
+			name = wheelName .. "Rim",
+			shape = Enum.PartType.Cylinder,
+			size = CarConfig.RIM_SIZE,
+			offset = offset,
+			color = CarConfig.CHROME_COLOR,
+			material = Enum.Material.Metal,
+			car = car,
+			chassis = chassis,
+		})
+	end
 end
 
 local function createCar(spawnPosition)
@@ -76,40 +345,7 @@ local function createCar(spawnPosition)
 	ballastWeld.Part1 = chassis
 	ballastWeld.Parent = ballast
 
-	-- A low hood up front and a low trunk out back, leaving an open cockpit
-	-- in the middle for the seat -- a roadster-style silhouette instead of
-	-- one flat slab, built from the same primitive Part shapes.
-	local hoodOffsetZ = -(CarConfig.CHASSIS_SIZE.Z / 2 - CarConfig.HOOD_SIZE.Z / 2)
-	local trunkOffsetZ = CarConfig.CHASSIS_SIZE.Z / 2 - CarConfig.TRUNK_SIZE.Z / 2
-	local panelOffsetY = CarConfig.CHASSIS_SIZE.Y / 2 + CarConfig.HOOD_SIZE.Y / 2
-
-	createBodyPanel(
-		"Hood",
-		CarConfig.HOOD_SIZE,
-		Vector3.new(0, panelOffsetY, hoodOffsetZ),
-		CarConfig.ACCENT_COLOR,
-		car,
-		chassis
-	)
-	createBodyPanel(
-		"Trunk",
-		CarConfig.TRUNK_SIZE,
-		Vector3.new(0, panelOffsetY, trunkOffsetZ),
-		CarConfig.ACCENT_COLOR,
-		car,
-		chassis
-	)
-
-	-- Wheel cylinders default to spinning around their local X axis, which already
-	-- lines up with the chassis's left/right axis, so no extra rotation is needed.
-	local sideOffset = CarConfig.CHASSIS_SIZE.X / 2 + CarConfig.WHEEL_SIZE.X / 2
-	local frontBackOffset = CarConfig.CHASSIS_SIZE.Z / 2 - CarConfig.WHEEL_SIZE.Y / 2
-	local heightOffset = -CarConfig.CHASSIS_SIZE.Y / 2
-
-	createWheel("WheelFrontLeft", Vector3.new(-sideOffset, heightOffset, -frontBackOffset), car, chassis)
-	createWheel("WheelFrontRight", Vector3.new(sideOffset, heightOffset, -frontBackOffset), car, chassis)
-	createWheel("WheelBackLeft", Vector3.new(-sideOffset, heightOffset, frontBackOffset), car, chassis)
-	createWheel("WheelBackRight", Vector3.new(sideOffset, heightOffset, frontBackOffset), car, chassis)
+	addStyling(car, chassis)
 
 	local seat = Instance.new("VehicleSeat")
 	seat.Name = "DriverSeat"
