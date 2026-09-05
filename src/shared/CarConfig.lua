@@ -77,8 +77,8 @@ return {
 	EXHAUST_OFFSET_Z = 7.6,
 
 	-- Wheels
-	WHEEL_SIZE = Vector3.new(2, 4, 4),
-	RIM_SIZE = Vector3.new(1.2, 2.2, 2.2),
+	WHEEL_SIZE = Vector3.new(1.6, 3, 3),
+	RIM_SIZE = Vector3.new(1, 1.8, 1.8),
 
 	-- Colors. BODY_COLOR is now a list -- one car is spawned per entry, each
 	-- painted with that color, instead of a single fixed body color.
@@ -101,5 +101,5 @@ return {
 	-- spaces. Offset from the origin so cars don't spawn on top of the
 	-- player's own spawn point.
 	PARKING_ORIGIN = Vector3.new(20, 5, 0),
-	PARKING_SPACING = 12, -- studs between each parking spot's center
+	PARKING_SPACING = 16, -- studs between each parking spot's center
 }
