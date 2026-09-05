@@ -8,9 +8,14 @@ local CarConfig = require(ReplicatedStorage.Shared.CarConfig)
 -- never snag on the world or throw off the car's physics -- only the
 -- Chassis and Ballast parts in createCar are solid/heavy.
 local function createDetail(options)
-	local part = Instance.new("Part")
+	-- className lets a detail be a WedgePart (for the sloped glass) instead
+	-- of a plain Part -- WedgePart is its own Instance class in Roblox, not
+	-- a Part with a "wedge" Shape, so it has to be chosen at creation time.
+	local part = Instance.new(options.className or "Part")
 	part.Name = options.name
-	part.Shape = options.shape or Enum.PartType.Block
+	if options.shape then
+		part.Shape = options.shape
+	end
 	part.Size = options.size
 	part.CFrame = options.chassis.CFrame * CFrame.new(options.offset) * (options.rotation or CFrame.new())
 	part.Color = options.color
@@ -22,10 +27,17 @@ local function createDetail(options)
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Parent = options.car
 
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = part
-	weld.Part1 = options.chassis
-	weld.Parent = part
+	if options.anchored then
+		-- Anchored parts ignore gravity/physics entirely and only move when
+		-- script explicitly sets their CFrame -- used for the wheels, which
+		-- we reposition and spin by hand every frame instead of welding.
+		part.Anchored = true
+	else
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = part
+		weld.Part1 = options.chassis
+		weld.Parent = part
+	end
 
 	return part
 end
@@ -73,10 +85,20 @@ local function addStyling(car, chassis)
 		car = car,
 		chassis = chassis,
 	})
+	-- WedgePart's tall vertical face is on its local -Z side, tapering down
+	-- to a point on local +Z. The windshield needs its tall edge toward the
+	-- roof (chassis +Z from here) and its point toward the hood (chassis -Z),
+	-- which is backwards from the default, so it's rotated 180 degrees. The
+	-- rear window wants tall-toward-roof (chassis -Z from there), which the
+	-- default orientation already gives us, so it's left unrotated. (If
+	-- either one looks like it's sloping the wrong way in Studio, that's the
+	-- part to flip -- swap its rotation between "180 degrees" and "none.")
 	createDetail({
 		name = "Windshield",
+		className = "WedgePart",
 		size = CarConfig.WINDSHIELD_SIZE,
 		offset = CarConfig.WINDSHIELD_OFFSET,
+		rotation = CFrame.Angles(0, math.rad(180), 0),
 		color = CarConfig.GLASS_COLOR,
 		material = Enum.Material.Glass,
 		transparency = 0.4,
@@ -85,6 +107,7 @@ local function addStyling(car, chassis)
 	})
 	createDetail({
 		name = "RearWindow",
+		className = "WedgePart",
 		size = CarConfig.REAR_WINDOW_SIZE,
 		offset = CarConfig.REAR_WINDOW_OFFSET,
 		color = CarConfig.GLASS_COLOR,
@@ -269,11 +292,13 @@ local function addStyling(car, chassis)
 		chassis = chassis,
 	})
 
-	-- Wheels and rims. Wheel cylinders default to spinning around their
-	-- local X axis, which already lines up with the chassis's left/right
-	-- axis, so no extra rotation is needed. Each rim shares its wheel's
-	-- position but is narrower and smaller in diameter, so it sits inset
-	-- inside the tire like a hubcap instead of z-fighting with it.
+	-- Wheels and rims. These are built anchored (see createDetail) instead of
+	-- welded, because attachDriving repositions and spins them by hand every
+	-- frame -- a WeldConstraint would just fight that. Wheel cylinders default
+	-- to spinning around their local X axis, which already lines up with the
+	-- chassis's left/right axis, so that's also the axis we spin them on for
+	-- rolling. Each rim shares its wheel's position but is narrower and
+	-- smaller in diameter, so it sits inset inside the tire like a hubcap.
 	local wheelSideOffset = halfX + CarConfig.WHEEL_SIZE.X / 2
 	local wheelFrontBackOffset = halfZ - CarConfig.WHEEL_SIZE.Y / 2
 	local wheelHeightOffset = -CarConfig.CHASSIS_SIZE.Y / 2
@@ -284,27 +309,34 @@ local function addStyling(car, chassis)
 		WheelBackLeft = Vector3.new(-wheelSideOffset, wheelHeightOffset, wheelFrontBackOffset),
 		WheelBackRight = Vector3.new(wheelSideOffset, wheelHeightOffset, wheelFrontBackOffset),
 	}
+
+	local wheels = {}
 	for wheelName, offset in pairs(wheelOffsets) do
-		createDetail({
+		local wheel = createDetail({
 			name = wheelName,
 			shape = Enum.PartType.Cylinder,
 			size = CarConfig.WHEEL_SIZE,
 			offset = offset,
 			color = Color3.fromRGB(35, 35, 35),
+			anchored = true,
 			car = car,
 			chassis = chassis,
 		})
-		createDetail({
+		local rim = createDetail({
 			name = wheelName .. "Rim",
 			shape = Enum.PartType.Cylinder,
 			size = CarConfig.RIM_SIZE,
 			offset = offset,
 			color = CarConfig.CHROME_COLOR,
 			material = Enum.Material.Metal,
+			anchored = true,
 			car = car,
 			chassis = chassis,
 		})
+		table.insert(wheels, { wheel = wheel, rim = rim, offset = offset })
 	end
+
+	return wheels
 end
 
 local function createCar(spawnPosition)
@@ -345,7 +377,27 @@ local function createCar(spawnPosition)
 	ballastWeld.Part1 = chassis
 	ballastWeld.Parent = ballast
 
-	addStyling(car, chassis)
+	-- Invisible collision block bridging the visible chassis down to the
+	-- wheels' bottom edge. The wheels themselves are cosmetic and don't
+	-- collide (see addStyling), so without this, nothing would stop the car
+	-- from sinking until the chassis box touches the ground -- which is
+	-- below where the wheels are drawn, making them poke through the floor.
+	local undercarriageHeight = CarConfig.WHEEL_SIZE.Y / 2
+	local undercarriage = Instance.new("Part")
+	undercarriage.Name = "Undercarriage"
+	undercarriage.Size = Vector3.new(CarConfig.CHASSIS_SIZE.X, undercarriageHeight, CarConfig.CHASSIS_SIZE.Z)
+	undercarriage.CFrame = chassis.CFrame * CFrame.new(0, -CarConfig.CHASSIS_SIZE.Y / 2 - undercarriageHeight / 2, 0)
+	undercarriage.Transparency = 1
+	undercarriage.CanCollide = true
+	undercarriage.Massless = true
+	undercarriage.Parent = car
+
+	local undercarriageWeld = Instance.new("WeldConstraint")
+	undercarriageWeld.Part0 = undercarriage
+	undercarriageWeld.Part1 = chassis
+	undercarriageWeld.Parent = undercarriage
+
+	local wheels = addStyling(car, chassis)
 
 	local seat = Instance.new("VehicleSeat")
 	seat.Name = "DriverSeat"
@@ -360,7 +412,7 @@ local function createCar(spawnPosition)
 
 	car.Parent = workspace
 
-	return chassis, seat
+	return chassis, seat, wheels
 end
 
 local function moveTowards(current, target, maxDelta)
@@ -370,7 +422,7 @@ local function moveTowards(current, target, maxDelta)
 	return current + math.sign(target - current) * maxDelta
 end
 
-local function attachDriving(chassis, seat)
+local function attachDriving(chassis, seat, wheels)
 	local bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.MaxForce = Vector3.new(math.huge, 0, math.huge)
 	bodyVelocity.Velocity = Vector3.new()
@@ -386,6 +438,10 @@ local function attachDriving(chassis, seat)
 	-- the chassis's actual velocity so we can ease it towards the target
 	-- speed instead of snapping BodyVelocity straight to the throttle input.
 	local currentSpeed = 0
+
+	-- Total angle each wheel has rolled through, in radians.
+	local wheelSpinAngle = 0
+	local wheelRadius = CarConfig.WHEEL_SIZE.Y / 2
 
 	RunService.Heartbeat:Connect(function(deltaTime)
 		-- UpVector is the direction the chassis's own "up" currently points in
@@ -434,8 +490,22 @@ local function attachDriving(chassis, seat)
 		if angularVelocity.Magnitude > CarConfig.MAX_ANGULAR_SPEED then
 			chassis.AssemblyAngularVelocity = angularVelocity.Unit * CarConfig.MAX_ANGULAR_SPEED
 		end
+
+		-- Roll the wheels. "angular speed = linear speed / radius" is the
+		-- standard formula for a wheel rolling without slipping, so this
+		-- spins faster the faster the car goes and reverses when backing up.
+		-- Each wheel is Anchored (see addStyling), so setting its CFrame here
+		-- is the only thing moving it -- this both follows the chassis around
+		-- and applies the spin, in one step.
+		wheelSpinAngle += (currentSpeed / wheelRadius) * deltaTime
+		local spin = CFrame.Angles(wheelSpinAngle, 0, 0)
+		for _, wheelData in ipairs(wheels) do
+			local wheelCFrame = chassis.CFrame * CFrame.new(wheelData.offset) * spin
+			wheelData.wheel.CFrame = wheelCFrame
+			wheelData.rim.CFrame = wheelCFrame
+		end
 	end)
 end
 
-local chassis, seat = createCar(CarConfig.SPAWN_POSITION)
-attachDriving(chassis, seat)
+local chassis, seat, wheels = createCar(CarConfig.SPAWN_POSITION)
+attachDriving(chassis, seat, wheels)

@@ -26,15 +26,18 @@ return {
 	BALLAST_SIZE = Vector3.new(4, 1, 6),
 	BALLAST_DENSITY = 25,
 
-	-- Cabin / glass
+	-- Cabin / glass. Roof is raised well above the seat (seat top sits around
+	-- Y=2 relative to the chassis center) so a seated character has headroom
+	-- instead of clipping through it. Windshield/rear window are WedgePart
+	-- sizes now: X=width, Y=height of the tall vertical face, Z=slope length.
 	ROOF_SIZE = Vector3.new(6, 0.5, 7),
-	ROOF_OFFSET_Y = 3.5,
+	ROOF_OFFSET_Y = 5.75,
 	ROOF_OFFSET_Z = 0.25,
-	WINDSHIELD_SIZE = Vector3.new(6, 1.5, 0.2),
-	WINDSHIELD_OFFSET = Vector3.new(0, 2.75, -3.3),
-	REAR_WINDOW_SIZE = Vector3.new(6, 1.5, 0.2),
-	REAR_WINDOW_OFFSET = Vector3.new(0, 2.75, 3.9),
-	PILLAR_SIZE = Vector3.new(0.3, 1.75, 0.3),
+	WINDSHIELD_SIZE = Vector3.new(6, 3.5, 3),
+	WINDSHIELD_OFFSET = Vector3.new(0, 3.75, -4),
+	REAR_WINDOW_SIZE = Vector3.new(6, 3.5, 2.5),
+	REAR_WINDOW_OFFSET = Vector3.new(0, 3.75, 4.5),
+	PILLAR_SIZE = Vector3.new(0.3, 3.5, 0.3),
 
 	-- Bumpers, grille, plates
 	BUMPER_SIZE = Vector3.new(8.4, 0.8, 0.6),
@@ -57,7 +60,7 @@ return {
 
 	-- Mirrors
 	MIRROR_SIZE = Vector3.new(0.3, 0.4, 0.8),
-	MIRROR_OFFSET = Vector3.new(4.3, 2.2, -3.3),
+	MIRROR_OFFSET = Vector3.new(4.3, 3, -4),
 
 	-- Spoiler
 	SPOILER_STRUT_SIZE = Vector3.new(0.3, 1, 0.3),
