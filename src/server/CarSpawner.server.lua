@@ -42,7 +42,7 @@ local function createDetail(options)
 	return part
 end
 
-local function addStyling(car, chassis)
+local function addStyling(car, chassis, bodyColor)
 	local halfX = CarConfig.CHASSIS_SIZE.X / 2
 	local halfZ = CarConfig.CHASSIS_SIZE.Z / 2
 
@@ -260,7 +260,7 @@ local function addStyling(car, chassis)
 		name = "SpoilerWing",
 		size = CarConfig.SPOILER_WING_SIZE,
 		offset = Vector3.new(0, CarConfig.SPOILER_WING_OFFSET_Y, CarConfig.SPOILER_OFFSET_Z),
-		color = CarConfig.BODY_COLOR,
+		color = bodyColor,
 		car = car,
 		chassis = chassis,
 	})
@@ -339,15 +339,15 @@ local function addStyling(car, chassis)
 	return wheels
 end
 
-local function createCar(spawnPosition)
+local function createCar(spawnPosition, bodyColor, carName)
 	local car = Instance.new("Model")
-	car.Name = "TestCar"
+	car.Name = carName
 
 	local chassis = Instance.new("Part")
 	chassis.Name = "Chassis"
 	chassis.Size = CarConfig.CHASSIS_SIZE
 	chassis.CFrame = CFrame.new(spawnPosition)
-	chassis.Color = CarConfig.BODY_COLOR
+	chassis.Color = bodyColor
 	chassis.TopSurface = Enum.SurfaceType.Smooth
 	chassis.BottomSurface = Enum.SurfaceType.Smooth
 	chassis.CustomPhysicalProperties = PhysicalProperties.new(
@@ -397,7 +397,7 @@ local function createCar(spawnPosition)
 	undercarriageWeld.Part1 = chassis
 	undercarriageWeld.Parent = undercarriage
 
-	local wheels = addStyling(car, chassis)
+	local wheels = addStyling(car, chassis, bodyColor)
 
 	local seat = Instance.new("VehicleSeat")
 	seat.Name = "DriverSeat"
@@ -507,5 +507,12 @@ local function attachDriving(chassis, seat, wheels)
 	end)
 end
 
-local chassis, seat, wheels = createCar(CarConfig.SPAWN_POSITION)
-attachDriving(chassis, seat, wheels)
+-- One parking spot per color in CarConfig.CAR_COLORS, laid out in a row
+-- along X (see PARKING_ORIGIN/PARKING_SPACING) so the cars sit parked side
+-- by side. Each car still drives independently once someone sits in it --
+-- this loop only decides where they start out.
+for index, bodyColor in ipairs(CarConfig.CAR_COLORS) do
+	local spotPosition = CarConfig.PARKING_ORIGIN + Vector3.new((index - 1) * CarConfig.PARKING_SPACING, 0, 0)
+	local chassis, seat, wheels = createCar(spotPosition, bodyColor, "Car" .. index)
+	attachDriving(chassis, seat, wheels)
+end

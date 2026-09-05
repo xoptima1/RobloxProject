@@ -80,8 +80,15 @@ return {
 	WHEEL_SIZE = Vector3.new(2, 4, 4),
 	RIM_SIZE = Vector3.new(1.2, 2.2, 2.2),
 
-	-- Colors
-	BODY_COLOR = Color3.fromRGB(200, 30, 30),
+	-- Colors. BODY_COLOR is now a list -- one car is spawned per entry, each
+	-- painted with that color, instead of a single fixed body color.
+	CAR_COLORS = {
+		Color3.fromRGB(200, 30, 30), -- red
+		Color3.fromRGB(30, 90, 200), -- blue
+		Color3.fromRGB(230, 200, 40), -- yellow
+		Color3.fromRGB(40, 150, 70), -- green
+		Color3.fromRGB(235, 235, 235), -- white
+	},
 	ACCENT_COLOR = Color3.fromRGB(40, 40, 40),
 	GLASS_COLOR = Color3.fromRGB(120, 170, 190),
 	CHROME_COLOR = Color3.fromRGB(210, 210, 215),
@@ -89,5 +96,10 @@ return {
 	TAILLIGHT_COLOR = Color3.fromRGB(255, 40, 40),
 	PLATE_COLOR = Color3.fromRGB(230, 230, 220),
 
-	SPAWN_POSITION = Vector3.new(0, 5, 0),
+	-- Parking row. One spot per car in CAR_COLORS, spaced out along X (the
+	-- car's width axis) so they sit side by side like a row of parking
+	-- spaces. Offset from the origin so cars don't spawn on top of the
+	-- player's own spawn point.
+	PARKING_ORIGIN = Vector3.new(20, 5, 0),
+	PARKING_SPACING = 12, -- studs between each parking spot's center
 }
